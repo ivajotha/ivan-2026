@@ -31,6 +31,53 @@ export const DashboardView = () => {
       return;
     }
 
+    const parsedAmount = parseFloat(amount);
+
+    // --- PARCHE DE DESPLIEGUE SEGURO ---
+    // Si la app está en Vercel (no es localhost), simulamos la respuesta de la API aquí mismo
+    if (window.location.hostname !== 'localhost') {
+      
+      // 1. Simular Error del Sistema (500) si activó el switch
+      if (simulateSystemError) {
+        setModalError('Error de SnailPay (500): Internal Server Error: SnailPay platform is temporarily down.');
+        return;
+      }
+
+      // 2. Simular Cobro Exitoso (Tarjeta correcta del PDF)
+      if (cardNumber === '1234123412341234' && expDate === '12/26' && cvv === '543') {
+        if (parsedAmount <= 0) {
+          setModalError('El monto de la recarga debe ser mayor a cero.');
+          return;
+        }
+
+        // Guardamos datos ficticios en LocalStorage tal cual lo pide el requerimiento 2.4
+        localStorage.setItem('last_payment_card', cardNumber);
+        localStorage.setItem('last_payment_cvv', cvv);
+        
+        updateBalance(parsedAmount);
+        setModalSuccess(`¡Depósito Aprobado! Código de autorización: AUTH-${Math.floor(1000 + Math.random() * 9000)}`);
+        
+        setTimeout(() => {
+          setShowModal(false);
+          setModalSuccess(null);
+          setAmount('');
+        }, 2000);
+        return;
+      }
+
+      // 3. Simular Tarjeta Rechazada (402) para cualquier otro dato
+      let detail = 'Tarjeta rechazada por fondos insuficientes o parámetros incorrectos.';
+      if (cardNumber.startsWith('4')) {
+        detail = 'Tarjeta bloqueada o sospecha de fraude.';
+      } else if (cvv === '000') {
+        detail = 'Código de seguridad (CVV) inválido.';
+      }
+      setModalError(`Transacción Rechazada: ${detail}`);
+      return;
+    }
+
+
+    // --- FLUJO LOCAL NORMAL (Cuando ejecutas con npm run dev en tu compu) ---
     try {
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (simulateSystemError) {
@@ -45,7 +92,7 @@ export const DashboardView = () => {
           expirationDate: expDate,
           cvv,
           fullName: cardName,
-          amount: parseFloat(amount),
+          amount: parsedAmount,
           userId: user.id,
           userEmail: user.email
         })
@@ -57,7 +104,7 @@ export const DashboardView = () => {
         localStorage.setItem('last_payment_card', data.cardNumber);
         localStorage.setItem('last_payment_cvv', data.cvv);
         
-        updateBalance(parseFloat(amount));
+        updateBalance(parsedAmount);
         setModalSuccess(`¡Depósito Aprobado! Código de autorización: ${data.authorization_code}`);
         
         setTimeout(() => {
@@ -74,6 +121,7 @@ export const DashboardView = () => {
       setModalError('Error de conexión. Asegúrate de tener el servidor Backend corriendo en el puerto 4000.');
     }
   };
+
 
   return (
     <div className="container-fluid min-vh-100 py-4 bg-light">
